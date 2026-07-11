@@ -26,6 +26,9 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    .hidden {
+      display: none !important;
+    }
     .futuristic-font {
       font-family: 'Orbitron', 'Share Tech Mono', sans-serif;
     }
@@ -84,6 +87,131 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+    #top-hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    #left-diagnostic-hud,
+    #right-control-hud,
+    #destination-carousel {
+      position: absolute;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #left-diagnostic-hud {
+      top: 96px;
+      left: 24px;
+      max-width: 320px;
+    }
+
+    #right-control-hud {
+      top: 96px;
+      right: 24px;
+      max-width: 320px;
+    }
+
+    #destination-carousel {
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #destination-carousel .destination-track {
+      display: flex;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    #destination-carousel [id^="card-"] {
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+      #top-hud {
+        padding: 12px;
+        align-items: flex-start;
+      }
+
+      #top-hud .cyber-panel {
+        display: none;
+      }
+
+      #left-diagnostic-hud {
+        top: 88px;
+        left: 12px;
+        right: 12px;
+        max-width: none;
+      }
+
+      #left-diagnostic-hud > .cyber-panel {
+        width: 100%;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      #right-control-hud {
+        top: auto;
+        right: 12px;
+        bottom: 148px;
+        left: 12px;
+        max-width: none;
+      
+        display: none;
+      }
+
+      #right-control-hud > .cyber-panel {
+        padding: 10px 12px;
+        border-radius: 16px;
+      }
+
+      #destination-carousel {
+        bottom: 10px;
+        gap: 8px;
+        padding-inline: 10px;
+      
+        max-height: 128px;
+        overflow: hidden;
+      }
+
+      #destination-carousel .destination-track {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 10px;
+        padding-inline: 2px;
+      }
+
+      #destination-carousel [id^="card-"] {
+        width: 136px;
+      }
+
+      #destination-carousel [id^="card-"] > div:first-child {
+        height: 44px;
+      }
+
+      #cors-warning-overlay {
+        top: 76px;
+        left: 12px;
+        right: 12px;
+        transform: none;
+        border-radius: 18px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+    }
   </style>
 </head>
 <body class="w-full h-screen relative flex items-center justify-center overflow-hidden">
@@ -112,11 +240,9 @@
   <div id="cors-warning-overlay" class="hidden absolute top-24 left-1/2 -translate-x-1/2 z-40 bg-amber-500/95 text-white text-xs px-5 py-3.5 rounded-full flex items-center gap-4 shadow-xl pointer-events-auto border border-amber-300 transition-all">
     <div class="flex items-center gap-2">
       <i data-lucide="alert-triangle" class="w-4 h-4 text-white animate-bounce"></i>
-      <span class="font-bold">로컬 실행(CORS) 제한이 감지되었습니다. 준비하신 이미지를 직접 지정하면 3D VR이 기동합니다.</span>
+      <span class="font-bold">로컬 실행(CORS) 제한이 감지되었습니다. 이미지를 직접 지정하면 3D VR이 기동합니다.</span>
     </div>
-    <button onclick="triggerLocalFileSelect()" class="bg-white text-amber-700 font-black px-4 py-1.5 rounded-full hover:bg-slate-100 active:scale-95 transition-all shadow-md">
-      📷 이미지 선택 (CORS 우회)
-    </button>
+    <button onclick="triggerLocalFileSelect()" class="bg-white text-amber-700 font-black px-4 py-1.5 rounded-full hover:bg-slate-100 active:scale-95 transition-all shadow-md">이미지 선택 (CORS 우회)</button>
   </div>
 
   <!-- Hidden HTML File input designed to read Data URLs bypass local file CORS constraints -->
@@ -158,7 +284,7 @@
   </div>
 
   <!-- ================= MATTERPORT STYLE MINIMALIST HEADER HUD ================= -->
-  <div class="absolute top-0 inset-x-0 z-30 pointer-events-none p-6 flex items-center justify-between">
+  <div id="top-hud" class="absolute top-0 inset-x-0 z-30 pointer-events-none p-6 flex items-center justify-between">
     <!-- Brand / Title Info -->
     <div class="flex items-center gap-3.5 pointer-events-auto bg-white/95 px-4.5 py-3 rounded-full border border-emerald-200 shadow-lg shadow-emerald-900/5">
       <div class="p-2 bg-emerald-500 rounded-full text-white shadow-[0_0_10px_#10b981]">
@@ -187,7 +313,7 @@
   </div>
 
   <!-- ================= LEFT DIAGNOSTIC HUD ================= -->
-  <div class="absolute top-24 left-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
+  <div id="left-diagnostic-hud" class="absolute top-24 left-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
     <div class="cyber-panel p-4.5 rounded-3xl flex flex-col gap-3 pointer-events-auto shadow-xl border border-emerald-200/50">
       <span class="futuristic-font text-xs text-emerald-800 font-black tracking-widest border-b border-emerald-100 pb-2 flex items-center justify-between">
         SYS.INTEGRITY
@@ -198,33 +324,34 @@
         <div class="flex justify-between"><span>THERMAL CLIMATE:</span><span class="text-sky-600 font-extrabold">24.5 °C</span></div>
         <div class="flex justify-between"><span>SOLAR GRID INLET:</span><span class="text-amber-500 font-extrabold" id="diag-solar">142.8%</span></div>
       </div>
-      <!-- ✨ Gemini Environmental Diagnosing Protocol Button -->
+      <!-- Gemini Environmental Diagnosing Protocol Button -->
       <button onclick="triggerAIRegionScan()" class="mt-2 w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-[11px] font-bold rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all">
         <i data-lucide="activity" class="w-4 h-4"></i>
-        ✨ AI 환경 정밀 스캔
+        AI 환경 정밀 스캔
       </button>
     </div>
+  </div>
 
-    <!-- ================= RIGHT MOVEMENT MATRIX CONTROLLER ================= -->
-  <div class="absolute top-24 right-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
+  <!-- ================= RIGHT MOVEMENT MATRIX CONTROLLER ================= -->
+  <div id="right-control-hud" class="absolute top-24 right-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
     <!-- Camera Pan Controls info -->
     <div class="cyber-panel p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto">
       <span class="text-[9px] font-mono font-bold text-slate-700 uppercase tracking-widest text-center">Interactive Lens</span>
       <div class="text-[10px] text-slate-600 leading-normal font-mono flex flex-col gap-1 text-center">
-        <span>🖱️ 마우스 드래그: 시야 회전</span>
-        <span>📱 모바일: 화면 터치 스와이프</span>
-        <span>🔍 휠 스크롤: 시야 줌인 / 아웃</span>
+        <span>마우스 드래그: 시야 회전</span>
+        <span>모바일: 화면 터치 스와이프</span>
+        <span>휠 스크롤: 시야 줌인 / 아웃</span>
       </div>
     </div>
   </div>
 
   <!-- ================= BOTTOM DESTINATIONS SLIDE CAROUSEL ================= -->
-  <div class="absolute bottom-6 left-0 right-0 z-30 pointer-events-none flex flex-col items-center gap-3 px-6">
+  <div id="destination-carousel" class="absolute bottom-6 left-0 right-0 z-30 pointer-events-none flex flex-col items-center gap-3 px-6">
     <div class="bg-white/95 px-4.5 py-1.5 rounded-full border border-teal-100 shadow-md text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
       Select Destination Space
     </div>
     
-    <div class="pointer-events-auto flex items-center gap-4 overflow-x-auto max-w-full pb-1 px-4 scroll-smooth no-scrollbar">
+    <div class="destination-track pointer-events-auto flex items-center gap-4 overflow-x-auto max-w-full pb-1 px-4 scroll-smooth no-scrollbar">
       
       <!-- Card 1 (Active) -->
       <div id="card-promenade" onclick="selectSpace('promenade')" class="flex-shrink-0 w-44 border-2 border-emerald-400 bg-white p-2 rounded-2xl shadow-xl cursor-pointer transform hover:scale-105 transition-all">
@@ -258,7 +385,7 @@
         </div>
         <div class="mt-2 flex flex-col gap-0.5">
           <span class="text-[10px] font-bold text-slate-800 leading-tight">Solar Grid Concentrator</span>
-          <span class="text-[8px] font-mono text-slate-400">Power Node (Backup Vec)</span>
+          <span class="text-[8px] font-mono text-slate-400">3D Real Panoramic Twin C</span>
         </div>
       </div>
 
@@ -464,7 +591,8 @@
 
     // RAW UNENCODED FILENAMES - Preventing 404 double-encoding errors on local browsers!
     const promenadeImageUrl = "./images/promenade.png";
-	const aquaticaImageUrl = "./images/aquatica.png";
+    const aquaticaImageUrl = "./images/aquatica.png";
+    const solarCoreImageUrl = "./images/solar-core.png";
 
     // Global parameters for VR Space Scene
     let scene, camera, renderer;
@@ -766,7 +894,7 @@
       const conf = activeSpaceColors[spaceId];
       
       // Update HUD Labels
-      const displayLabel = spaceId === 'promenade' ? 'PROMENADE 04 (3D REAL)' : (spaceId === 'aquatica' ? 'AQUATICA DOME (3D REAL)' : 'SOLAR-CORE (BACKUP)');
+      const displayLabel = spaceId === 'promenade' ? 'PROMENADE 04 (3D REAL)' : (spaceId === 'aquatica' ? 'AQUATICA DOME (3D REAL)' : 'SOLAR-CORE (3D REAL)');
       document.getElementById('active-space-title').textContent = displayLabel;
       document.getElementById('diag-solar').textContent = conf.coreVal;
 
@@ -795,19 +923,8 @@
         loadSpaceTexture(aquaticaImageUrl);
         lon = 180;
       } else {
-        // Fallback procedural Core
-        setTimeout(() => {
-          const newCanvas = generateSolarisPanoramaTexture(spaceId);
-          panoramaMesh.material.map.dispose();
-          panoramaMesh.material.map = new THREE.CanvasTexture(newCanvas);
-          panoramaMesh.material.map.needsUpdate = true;
-          
-          // Dismiss loader
-          screen.style.opacity = '0';
-          setTimeout(() => screen.style.display = 'none', 700);
-          document.getElementById('cors-warning-overlay').classList.add('hidden'); // Clear overlay for vector backup
-        }, 300);
-        lon = 90;
+        loadSpaceTexture(solarCoreImageUrl);
+        lon = 180;
       }
 
       lat = 0;
