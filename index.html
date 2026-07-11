@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SOLARIA: Eco-Utopia 360° Virtual Tour</title>
+  
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Three.js Library for high-performance 3D Sphere Renderer -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <!-- Google Fonts for Futuristic Vibe -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+
+  <!-- PWA Manifest embedded via Data URL - Strictly Syntax Checked Base64 -->
+  <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjogIlNPT0xBUklBIFZSIiwgInNob3J0X25hbWUiOiAiU09MQVJJQSIsICJzdGFydF91cmwiOiAiLiIsICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLCAidGhlbWVfY29sb3IiOiAiIzE0Yjg2NyIsICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwMDAwMDAifQ==">
+  
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: #000;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .futuristic-font {
+      font-family: 'Orbitron', 'Share Tech Mono', sans-serif;
+    }
+    .cyber-panel {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(20, 184, 166, 0.35);
+      box-shadow: 0 10px 40px 0 rgba(16, 185, 129, 0.1), inset 0 0 15px rgba(255, 255, 255, 0.8);
+    }
+    .neon-text-emerald {
+      text-shadow: 0 0 5px #10b981, 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+    .neon-border-emerald {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), inset 0 0 8px rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.5);
+    }
+    
+    /* 3D VR Dragging Canvas Container */
+    #vr-canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      cursor: grab;
+    }
+    #vr-canvas-container:active {
+      cursor: grabbing;
+    }
+
+    /* Screen Space Hotspots Overlay */
+    .hotspot-element {
+      position: absolute;
+      z-index: 10;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      will-change: transform, opacity;
+      transition: opacity 0.25s ease, transform 0.05s linear;
+    }
+
+    /* Pulsing Hotspot Rings (Matterport style) */
+    @keyframes ping-ring {
+      0% { transform: scale(0.8); opacity: 0.8; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .pulse-ring {
+      animation: ping-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    /* Hide scrollbars for slides selection */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="w-full h-screen relative flex items-center justify-center overflow-hidden">
+
+  <!-- ================= 3D VR CANVAS CONTAINER ================= -->
+  <div id="vr-canvas-container"></div>
+
+  <!-- ================= SPATIAL SYNC LOADING SCREEN ================= -->
+  <div id="spatial-loading-screen" class="absolute inset-0 bg-slate-950/85 backdrop-blur-2xl z-50 flex flex-col items-center justify-center transition-all duration-700 animate-fadeIn">
+    <div class="flex flex-col items-center gap-6 p-8 max-w-sm text-center">
+      <div class="relative w-20 h-20 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+        <i data-lucide="scan" class="w-8 h-8 text-emerald-400 animate-pulse"></i>
+      </div>
+      <div class="flex flex-col gap-2">
+        <h2 class="futuristic-font text-white font-black text-lg tracking-widest uppercase">SOLARIA Syncing</h2>
+        <p class="text-xs text-emerald-400 font-mono tracking-wider" id="loading-status">INITIALIZING 3D ENVIRONMENT...</p>
+      </div>
+      <div class="w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
+        <div id="loading-progress" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width: 10%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CORS INTERFERENCE LOCAL LOADER BYPASS WARNING OVERLAY ================= -->
+  <div id="cors-warning-overlay" class="hidden absolute top-24 left-1/2 -translate-x-1/2 z-40 bg-amber-500/95 text-white text-xs px-5 py-3.5 rounded-full flex items-center gap-4 shadow-xl pointer-events-auto border border-amber-300 transition-all">
+    <div class="flex items-center gap-2">
+      <i data-lucide="alert-triangle" class="w-4 h-4 text-white animate-bounce"></i>
+      <span class="font-bold">로컬 실행(CORS) 제한이 감지되었습니다. 준비하신 이미지를 직접 지정하면 3D VR이 기동합니다.</span>
+    </div>
+    <button onclick="triggerLocalFileSelect()" class="bg-white text-amber-700 font-black px-4 py-1.5 rounded-full hover:bg-slate-100 active:scale-95 transition-all shadow-md">
+      📷 이미지 선택 (CORS 우회)
+    </button>
+  </div>
+
+  <!-- Hidden HTML File input designed to read Data URLs bypass local file CORS constraints -->
+  <input type="file" id="local-file-input" accept="image/*" class="hidden" onchange="handleLocalFileSelect(event)">
+
+  <!-- ================= DYNAMIC SCREEN SPACE HOTSPOTS OVERLAY ================= -->
+  <div id="hotspot-overlay-container" class="absolute inset-0 pointer-events-none z-10">
+    
+    <!-- Hotspot 1: Botanic / Aquatic Core Terminal -->
+    <div id="hotspot-botanic" class="hotspot-element hidden" style="opacity: 0;">
+      <div class="flex flex-col items-center group pointer-events-auto">
+        <div class="relative w-12 h-12 flex items-center justify-center cursor-pointer" onclick="openChat()">
+          <div class="absolute inset-0 rounded-full bg-emerald-500/20 border-2 border-emerald-400/60 pulse-ring"></div>
+          <div class="absolute inset-2 rounded-full bg-emerald-500 border border-white shadow-[0_0_12px_#10b981] flex items-center justify-center transition-transform group-hover:scale-110">
+            <i data-lucide="leaf" class="w-5 h-5 text-white"></i>
+          </div>
+        </div>
+        <div id="label-botanic" class="mt-2.5 bg-white/95 px-3.5 py-1 rounded-xl border border-emerald-200 text-[10px] font-mono font-black text-slate-800 shadow-lg tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          AEGIS AI Botanic Core
+        </div>
+      </div>
+    </div>
+
+    <!-- Hotspot 2: Energy / Molecular Station -->
+    <div id="hotspot-nano" class="hotspot-element hidden" style="opacity: 0;">
+      <div class="flex flex-col items-center group pointer-events-auto">
+        <div class="relative w-12 h-12 flex items-center justify-center cursor-pointer" onclick="openMarket()">
+          <div class="absolute inset-0 rounded-full bg-sky-500/20 border-2 border-sky-400/60 pulse-ring" style="animation-delay: 0.8s;"></div>
+          <div class="absolute inset-2 rounded-full bg-sky-500 border border-white shadow-[0_0_12px_#0ea5e9] flex items-center justify-center transition-transform group-hover:scale-110">
+            <i data-lucide="cpu" class="w-5 h-5 text-white"></i>
+          </div>
+        </div>
+        <div id="label-nano" class="mt-2.5 bg-white/95 px-3.5 py-1 rounded-xl border border-sky-200 text-[10px] font-mono font-black text-slate-800 shadow-lg tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          Molecular Lab Terminal
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= MATTERPORT STYLE MINIMALIST HEADER HUD ================= -->
+  <div class="absolute top-0 inset-x-0 z-30 pointer-events-none p-6 flex items-center justify-between">
+    <!-- Brand / Title Info -->
+    <div class="flex items-center gap-3.5 pointer-events-auto bg-white/95 px-4.5 py-3 rounded-full border border-emerald-200 shadow-lg shadow-emerald-900/5">
+      <div class="p-2 bg-emerald-500 rounded-full text-white shadow-[0_0_10px_#10b981]">
+        <i data-lucide="navigation" class="w-4 h-4"></i>
+      </div>
+      <div class="flex flex-col">
+        <span class="text-xs font-bold text-slate-800 tracking-tight leading-tight">SOLARIA Spaces</span>
+        <span id="active-space-title" class="text-[10px] font-black font-mono text-emerald-600 tracking-wider">ECO-PROMENADE 04</span>
+      </div>
+    </div>
+
+    <!-- Navigation Utility Panel -->
+    <div class="flex items-center gap-3.5 pointer-events-auto">
+      <!-- Gyro/Compass Telemetry info -->
+      <div class="cyber-panel px-4 py-2.5 rounded-full text-[10px] font-mono text-slate-600 flex items-center gap-2">
+        <i data-lucide="compass" class="w-3.5 h-3.5 text-teal-600 animate-[spin_10s_linear_infinite]"></i>
+        AZIMUTH: <span class="text-teal-800 font-extrabold" id="hud-azimuth">0°</span>
+      </div>
+      
+      <!-- PWA Standalone trigger -->
+      <button id="pwa-install-btn" class="hidden px-4.5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-95 text-white text-[10px] font-black rounded-full shadow-lg flex items-center gap-1.5 transition-all">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        INSTALL APP
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= LEFT DIAGNOSTIC HUD ================= -->
+  <div class="absolute top-24 left-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
+    <div class="cyber-panel p-4.5 rounded-3xl flex flex-col gap-3 pointer-events-auto shadow-xl border border-emerald-200/50">
+      <span class="futuristic-font text-xs text-emerald-800 font-black tracking-widest border-b border-emerald-100 pb-2 flex items-center justify-between">
+        SYS.INTEGRITY
+        <span class="text-[8px] px-2 py-0.5 bg-emerald-500 text-white rounded-full font-mono font-bold shadow-md">OK</span>
+      </span>
+      <div class="flex flex-col gap-2 font-mono text-[10px] text-slate-600">
+        <div class="flex justify-between"><span>BIOME QUALITY:</span><span class="text-emerald-600 font-extrabold">99.98% PURE</span></div>
+        <div class="flex justify-between"><span>THERMAL CLIMATE:</span><span class="text-sky-600 font-extrabold">24.5 °C</span></div>
+        <div class="flex justify-between"><span>SOLAR GRID INLET:</span><span class="text-amber-500 font-extrabold" id="diag-solar">142.8%</span></div>
+      </div>
+      <!-- ✨ Gemini Environmental Diagnosing Protocol Button -->
+      <button onclick="triggerAIRegionScan()" class="mt-2 w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-[11px] font-bold rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        ✨ AI 환경 정밀 스캔
+      </button>
+    </div>
+
+    <!-- ================= RIGHT MOVEMENT MATRIX CONTROLLER ================= -->
+  <div class="absolute top-24 right-6 z-20 pointer-events-none flex flex-col gap-4 max-w-xs">
+    <!-- Camera Pan Controls info -->
+    <div class="cyber-panel p-4 rounded-2xl flex flex-col gap-2 pointer-events-auto">
+      <span class="text-[9px] font-mono font-bold text-slate-700 uppercase tracking-widest text-center">Interactive Lens</span>
+      <div class="text-[10px] text-slate-600 leading-normal font-mono flex flex-col gap-1 text-center">
+        <span>🖱️ 마우스 드래그: 시야 회전</span>
+        <span>📱 모바일: 화면 터치 스와이프</span>
+        <span>🔍 휠 스크롤: 시야 줌인 / 아웃</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM DESTINATIONS SLIDE CAROUSEL ================= -->
+  <div class="absolute bottom-6 left-0 right-0 z-30 pointer-events-none flex flex-col items-center gap-3 px-6">
+    <div class="bg-white/95 px-4.5 py-1.5 rounded-full border border-teal-100 shadow-md text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
+      Select Destination Space
+    </div>
+    
+    <div class="pointer-events-auto flex items-center gap-4 overflow-x-auto max-w-full pb-1 px-4 scroll-smooth no-scrollbar">
+      
+      <!-- Card 1 (Active) -->
+      <div id="card-promenade" onclick="selectSpace('promenade')" class="flex-shrink-0 w-44 border-2 border-emerald-400 bg-white p-2 rounded-2xl shadow-xl cursor-pointer transform hover:scale-105 transition-all">
+        <div class="w-full h-14 rounded-lg bg-emerald-500 flex items-center justify-center text-white font-mono font-black text-xs relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-tr from-emerald-600 to-teal-500 opacity-90"></div>
+          <span class="z-10 tracking-widest">PROMENADE</span>
+        </div>
+        <div class="mt-2 flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-slate-800 leading-tight">Eco-Promenade 04</span>
+          <span class="text-[8px] font-mono text-emerald-600">3D Real Panoramic Twin A</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div id="card-aquatica" onclick="selectSpace('aquatica')" class="flex-shrink-0 w-44 border border-slate-200 bg-white/90 p-2 rounded-2xl shadow-md cursor-pointer transform hover:scale-105 transition-all">
+        <div class="w-full h-14 rounded-lg bg-sky-500 flex items-center justify-center text-white font-mono font-black text-xs relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-tr from-sky-600 to-teal-500 opacity-95"></div>
+          <span class="z-10 tracking-widest">AQUATICA</span>
+        </div>
+        <div class="mt-2 flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-slate-800 leading-tight">Water Oasis Dome</span>
+          <span class="text-[8px] font-mono text-slate-400">3D Real Panoramic Twin B</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div id="card-solaria" onclick="selectSpace('solaria')" class="flex-shrink-0 w-44 border border-slate-200 bg-white/90 p-2 rounded-2xl shadow-md cursor-pointer transform hover:scale-105 transition-all">
+        <div class="w-full h-14 rounded-lg bg-amber-500 flex items-center justify-center text-white font-mono font-black text-xs relative overflow-hidden">
+          <div class="absolute inset-0 bg-gradient-to-tr from-amber-600 to-yellow-500 opacity-95"></div>
+          <span class="z-10 tracking-widest">SOLAR-CORE</span>
+        </div>
+        <div class="mt-2 flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold text-slate-800 leading-tight">Solar Grid Concentrator</span>
+          <span class="text-[8px] font-mono text-slate-400">Power Node (Backup Vec)</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= MODALS & DIALOG INTERFACES ================= -->
+
+  <!-- Modal 1: AEGIS Biotech Communication Link -->
+  <div id="chat-modal" class="absolute inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="cyber-panel w-full max-w-lg h-[80vh] rounded-3xl flex flex-col overflow-hidden border-emerald-300 shadow-[0_20px_50px_rgba(16,185,129,0.18)]">
+      
+      <!-- Modal Title -->
+      <div class="px-5 py-4.5 bg-white/90 border-b border-emerald-200 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <i data-lucide="leaf" class="w-6 h-6 text-emerald-600 animate-bounce"></i>
+          <div class="flex flex-col">
+            <span class="futuristic-font text-xs text-emerald-800 font-black tracking-widest">AEGIS ECO-COMPANION v2.5</span>
+            <span class="text-[9px] font-mono text-teal-600 font-extrabold">BIOMETRIC INTEGRATION ACTIVE</span>
+          </div>
+        </div>
+        <button onclick="closeChat()" class="p-1.5 rounded-xl border border-rose-300 text-rose-500 hover:bg-rose-500/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Chat feeds output -->
+      <div id="chat-messages" class="flex-1 p-5 overflow-y-auto flex flex-col gap-4 font-mono text-xs font-medium">
+        <div class="flex flex-col gap-1 border-l-3 border-emerald-500 pl-3 py-1.5 bg-emerald-50/50 rounded-r-xl">
+          <div class="flex justify-between text-[9px] text-slate-400 font-bold">
+            <span>[ SYSTEM INTRO ]</span>
+            <span>00:00:01</span>
+          </div>
+          <p class="text-emerald-800 font-bold leading-relaxed">따뜻한 햇살 가득한 안녕하십니까, 모험가님! 저는 청정 생태 하늘 도시 '솔라리아'의 수호 가이드 이지스(AEGIS)입니다. 과학과 자연이 공존하는 이곳의 생태 시스템, 최첨단 클린 기술에 대해 무엇이든 질문해 주세요.</p>
+        </div>
+      </div>
+
+      <!-- Inputs for chat -->
+      <div class="p-4 bg-white/70 border-t border-emerald-200 flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <div id="voice-synth-indicator" class="flex-1 px-3 py-1 bg-white/90 rounded-xl border border-teal-200 flex items-center justify-between text-[10px] font-mono shadow-sm">
+            <span class="text-slate-500 font-extrabold">AI VOICE SYNTHESIS:</span>
+            <button onclick="toggleVoiceOutput()" id="btn-voice-toggle" class="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-500/20 transition-colors font-bold text-[9px]">
+              ENABLED (KORE)
+            </button>
+          </div>
+        </div>
+
+        <form id="chat-form" onsubmit="handleSendChat(event)" class="flex gap-2">
+          <input id="chat-input" type="text" placeholder="솔라리아의 나노 발전이나 대기 정화 기술에 대해 물어보세요..." class="flex-1 px-3 py-2 bg-white/90 border border-teal-200 rounded-xl text-slate-800 text-xs placeholder-slate-400 focus:outline-none focus:border-emerald-400 transition-colors font-mono font-medium shadow-sm">
+          <button type="submit" class="px-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all text-xs flex items-center justify-center gap-1.5 shadow-md">
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            ✨ 이지스 자율 대화 동조
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Modal 2: Nano Synthesis Laboratory (Integrated Custom Gemini Synthesizer) -->
+  <div id="market-modal" class="absolute inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="cyber-panel w-full max-w-2xl h-[85vh] rounded-3xl flex flex-col overflow-hidden border-sky-300 shadow-[0_20px_50px_rgba(14,165,233,0.18)]">
+      
+      <!-- Header -->
+      <div class="px-5 py-4 bg-white/90 border-b border-sky-200 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <i data-lucide="cpu" class="w-6 h-6 text-sky-500 animate-pulse"></i>
+          <div class="flex flex-col">
+            <span class="futuristic-font text-xs text-sky-800 font-black tracking-widest">NANOTECH MOLECULAR LAB</span>
+            <span class="text-[9px] font-mono text-slate-500 font-bold">ECO-SYNTHETIC BIOME MODULATORS</span>
+          </div>
+        </div>
+        <button onclick="closeMarket()" class="p-1.5 rounded-xl border border-rose-300 text-rose-500 hover:bg-rose-500/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Main Layout Split -->
+      <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+        
+        <!-- Left Side: Predefined standard modulators -->
+        <div class="w-full md:w-1/2 p-5 border-r border-slate-100 overflow-y-auto flex flex-col gap-4 font-mono text-xs">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center mb-1 shadow-sm">
+            <span class="text-xs text-emerald-800 font-black">보유 에너지 지수: 24,500 Eco-Credits</span>
+          </div>
+
+          <!-- Product row 1 -->
+          <div class="border border-slate-100 bg-white/70 p-3.5 rounded-2xl flex items-center justify-between hover:border-emerald-300 transition-all shadow-sm">
+            <div class="flex items-center gap-3">
+              <!-- FIXED ICON TYPE 'pocket' -> 'package' -->
+              <div class="w-11 h-11 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center shadow-inner">
+                <i data-lucide="package" class="w-5 h-5 text-emerald-600"></i>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-slate-800 font-extrabold text-[11px]">Atmos Purifier Core</span>
+                <span class="text-[8px] text-slate-500">대기 정화 보조 엔진 활성화</span>
+              </div>
+            </div>
+            <button onclick="buyItem('Atmos Purifier Core', 3500)" class="px-3.5 py-2 bg-emerald-500 text-white text-[10px] rounded-xl font-bold hover:bg-emerald-600 transition-all shadow-md">
+              3,500 Cr
+            </button>
+          </div>
+
+          <!-- Product row 2 -->
+          <div class="border border-slate-100 bg-white/70 p-3.5 rounded-2xl flex items-center justify-between hover:border-teal-300 transition-all shadow-sm">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl bg-teal-100 border border-teal-200 flex items-center justify-center shadow-inner">
+                <i data-lucide="sun" class="w-5 h-5 text-teal-600"></i>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-slate-800 font-extrabold text-[11px]">Nano-Solar Suit</span>
+                <span class="text-[8px] text-slate-500">주변 산란광을 지속적으로 흡수</span>
+              </div>
+            </div>
+            <button onclick="buyItem('Nano-Solar Suit', 7200)" class="px-3.5 py-2 bg-teal-500 text-white text-[10px] rounded-xl font-bold hover:bg-teal-600 transition-all shadow-md">
+              7,200 Cr
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Side: Gemini Custom Synthesis Interface -->
+        <div class="w-full md:w-1/2 p-5 bg-sky-50/30 flex flex-col justify-between overflow-y-auto">
+          <div class="flex flex-col gap-3">
+            <span class="futuristic-font text-xs text-sky-800 font-extrabold tracking-wider border-b border-sky-200 pb-1 flex items-center gap-1.5">
+              <i data-lucide="wand2" class="w-4 h-4 text-sky-600"></i>
+              자율 분자 장비 합성 프로토콜
+            </span>
+            <p class="text-[10px] text-slate-500 font-medium leading-relaxed font-sans">
+              필요한 특수 기능이나 디자인을 서술해 주십시오. 솔라리아 나노 기계망과 Gemini 인공지능이 융합하여 안전성 검증 및 맞춤형 신 물질 분자 조립을 진행합니다.
+            </p>
+
+            <!-- Input area -->
+            <div class="flex flex-col gap-2 mt-2">
+              <textarea id="synth-prompt" rows="3" placeholder="예: 주변 광합성을 유도하여 나의 슈트에 생기 필터를 돌려주는 하이테크 리프 날개 장비..." class="w-full p-3 bg-white border border-sky-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:border-sky-400 font-mono shadow-inner resize-none"></textarea>
+              <button onclick="requestCustomAISynthesis()" class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                ✨ 나노 분자 맞춤 합성
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic Synthesis result card -->
+          <div id="synth-result-container" class="mt-4 flex-1 border border-dashed border-sky-300 rounded-2xl p-4 bg-white/80 flex flex-col items-center justify-center text-center">
+            <i data-lucide="package-open" class="w-10 h-10 text-sky-300 animate-pulse mb-2"></i>
+            <p class="text-[11px] font-mono text-slate-400">합성할 장비를 입력하고 프로토콜을 가동해 주십시오.</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Modal 3: Gemini Environmental Region Scan Diagnostic Report Output -->
+  <div id="scan-modal" class="absolute inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="cyber-panel w-full max-w-xl h-[70vh] rounded-3xl flex flex-col overflow-hidden border-teal-300 shadow-[0_20px_50px_rgba(20,184,166,0.18)]">
+      
+      <!-- Header -->
+      <div class="px-5 py-4 bg-white/90 border-b border-teal-200 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <i data-lucide="scan" class="w-6 h-6 text-teal-600 animate-pulse"></i>
+          <div class="flex flex-col">
+            <span class="futuristic-font text-xs text-teal-800 font-black tracking-widest">ENVIRONMENTAL SCAN DIAGNOSTIC</span>
+            <span class="text-[9px] font-mono text-emerald-600 font-extrabold">REAL-TIME ATMOSPHERE SPECTROSCOPY</span>
+          </div>
+        </div>
+        <button onclick="closeScanModal()" class="p-1.5 rounded-xl border border-rose-300 text-rose-500 hover:bg-rose-500/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Report content -->
+      <div id="scan-report-content" class="flex-1 p-6 overflow-y-auto font-mono text-xs text-slate-700 leading-relaxed space-y-4">
+        <div class="flex items-center justify-center h-full flex-col gap-3">
+          <div class="w-10 h-10 border-4 border-teal-500/20 border-t-teal-600 rounded-full animate-spin"></div>
+          <p class="text-slate-400 text-center font-mono">가상 분광계를 정렬하여 구역 대기를 감별하는 중...</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 bg-slate-50 border-t border-teal-200 text-right flex justify-between items-center">
+        <span class="text-[9px] font-mono text-slate-400">SYS CORE LINK ADVISORY v1.2</span>
+        <button onclick="closeScanModal()" class="px-4 py-1.5 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 text-xs transition-colors">
+          진단 확인
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Notification panel feed -->
+  <div id="notification-feed" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm pointer-events-none"></div>
+
+  <!-- ================= 3D VR COMPILING AND CODES ================= -->
+  <script>
+    // Create icons with Lucide
+    lucide.createIcons();
+
+    const apiKey = ""; 
+    let systemAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'solaria-360-tour';
+
+    // RAW UNENCODED FILENAMES - Preventing 404 double-encoding errors on local browsers!
+    const promenadeImageUrl = "./images/promenade.png";
+	const aquaticaImageUrl = "./images/aquatica.png";
+
+    // Global parameters for VR Space Scene
+    let scene, camera, renderer;
+    let panoramaMesh;
+    let lon = 150, lat = 0; // Initial angle looking at the main focal center
+    let phi = 0, theta = 0;
+    let isUserInteracting = false;
+    let onPointerDownPointerX = 0, onPointerDownPointerY = 0;
+    let onPointerDownLon = 0, onPointerDownLat = 0;
+    let targetZoom = 80, currentZoom = 80;
+
+    // Current Active Scene Configuration
+    let activeSpace = 'promenade';
+    const activeSpaceColors = {
+      promenade: { sky1: '#075985', sky2: '#0ea5e9', land: '#059669', coreVal: '142.8%' },
+      aquatica: { sky1: '#1e40af', sky2: '#38bdf8', land: '#0891b2', coreVal: '198.5%' },
+      solaria: { sky1: '#581c87', sky2: '#f59e0b', land: '#047857', coreVal: '286.2%' }
+    };
+
+    // Dynamic Hotspots configuration per VR Spaces
+    const spaceHotspots = {
+      promenade: [
+        { id: 'hotspot-botanic', lon: 160, lat: -5, text: 'AEGIS AI Botanic Core' }, // Left waterfall island
+        { id: 'hotspot-nano', lon: 245, lat: -10, text: 'Molecular Lab Terminal' } // Right crystal dome
+      ],
+      aquatica: [
+        { id: 'hotspot-botanic', lon: 180, lat: 0, text: 'Deep Biome Reactor' }, // Central structural spiral glass tower
+        { id: 'hotspot-nano', lon: 110, lat: -5, text: 'Hydroponics Concentrator' } // Left circular light terrace
+      ],
+      solaria: [
+        { id: 'hotspot-botanic', lon: 135, lat: -10, text: 'Core Terminal Alpha' },
+        { id: 'hotspot-nano', lon: 225, lat: -10, text: 'Solar Grid Modulator' }
+      ]
+    };
+
+    // ================= DYNAMIC 360 PROCEDURAL PANORAMA GENERATOR =================
+    // Used dynamically as a high-fidelity procedural fallback or when switching scenes
+    function generateSolarisPanoramaTexture(spaceId = 'promenade') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2048;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      const conf = activeSpaceColors[spaceId];
+
+      // 1. Draw smooth panoramic vertical sky gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      skyGrad.addColorStop(0, conf.sky1); // Deep zenith
+      skyGrad.addColorStop(0.4, conf.sky2); // Sunrise glow
+      skyGrad.addColorStop(0.55, '#f0fdf4'); // Bright atmospheric ring
+      skyGrad.addColorStop(0.65, '#ccfbf1'); // Greenish horizon
+      skyGrad.addColorStop(1.0, '#e2e8f0'); // Crisp clean ground
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 2. Solar fusion energy generator core rays
+      const sunCenterX = canvas.width * 0.75;
+      const sunCenterY = canvas.height * 0.42;
+      const sunRad = ctx.createRadialGradient(sunCenterX, sunCenterY, 5, sunCenterX, sunCenterY, 350);
+      sunRad.addColorStop(0, '#ffffff');
+      sunRad.addColorStop(0.2, '#fef08a');
+      sunRad.addColorStop(0.5, '#2dd4bf');
+      sunRad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sunRad;
+      ctx.beginPath();
+      ctx.arc(sunCenterX, sunCenterY, 350, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Golden Solar arrays & geometric lines
+      ctx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 12; i++) {
+        const radius = 100 + i * 25;
+        ctx.beginPath();
+        ctx.arc(sunCenterX, sunCenterY, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 3. Draw far background Eco-Spires & Floating botanical islands
+      ctx.fillStyle = conf.land;
+      ctx.globalAlpha = 0.55;
+      // Procedural landscape waves matching continuous 360 edges
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height * 0.6);
+      for (let x = 0; x <= canvas.width; x++) {
+        const theta = (x / canvas.width) * Math.PI * 6; // Periodic wave structure
+        const waveH = Math.sin(theta) * 35 + Math.cos(theta * 0.5) * 15;
+        ctx.lineTo(x, canvas.height * 0.58 + waveH);
+      }
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.lineTo(0, canvas.height);
+      ctx.closePath();
+      ctx.fill();
+
+      // 4. White High-tech architectural structures (Domes and rings)
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#2dd4bf';
+      ctx.lineWidth = 2;
+      
+      // Left Dome Complex
+      ctx.beginPath();
+      ctx.arc(canvas.width * 0.35, canvas.height * 0.58, 60, Math.PI, 0);
+      ctx.fill();
+      ctx.stroke();
+
+      // Right Ring Archway
+      ctx.beginPath();
+      ctx.arc(canvas.width * 0.62, canvas.height * 0.58, 80, Math.PI, 0);
+      ctx.stroke();
+
+      // Vertical Garden Spires
+      const spires = [0.15, 0.28, 0.48, 0.82, 0.92];
+      spires.forEach(spireXPercent => {
+        const sx = canvas.width * spireXPercent;
+        const sy = canvas.height * 0.58;
+        const sh = 120 + Math.random() * 80;
+        
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath();
+        ctx.moveTo(sx - 15, sy);
+        ctx.lineTo(sx, sy - sh);
+        ctx.lineTo(sx + 15, sy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Glowing Core Line
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx, sy - sh + 15);
+        ctx.stroke();
+      });
+
+      // 5. Cleanup alpha states
+      ctx.globalAlpha = 1.0;
+
+      // 6. Draw Horizon deck walkway grids
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.15)';
+      ctx.lineWidth = 1.5;
+      for (let y = canvas.height * 0.58; y < canvas.height; y += 30) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      for (let x = 0; x < canvas.width; x += 100) {
+        ctx.beginPath();
+        ctx.moveTo(x, canvas.height * 0.58);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+
+      return canvas;
+    }
+
+    // ================= INITIALIZE 3D GRAPHICS SCENE =================
+    function initVRSpace() {
+      const container = document.getElementById('vr-canvas-container');
+
+      // 1. Camera & Scene setup
+      camera = new THREE.PerspectiveCamera(currentZoom, window.innerWidth / window.innerHeight, 1, 1100);
+      scene = new THREE.Scene();
+
+      // 2. Procedural panorama sphere setup
+      const geometry = new THREE.SphereGeometry(500, 60, 40);
+      geometry.scale(-1, 1, 1); // Invert geometry to view inside out
+
+      updateProgressBar(30, "로딩용 3D 구체 및 메쉬 구축 완료");
+
+      // Initial Material Placeholder
+      const material = new THREE.MeshBasicMaterial({ color: 0x010c15 });
+      panoramaMesh = new THREE.Mesh(geometry, material);
+      scene.add(panoramaMesh);
+
+      // 3. WebGL Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      // 4. Mouse / Touch event connections
+      document.addEventListener('pointerdown', onPointerDown, false);
+      document.addEventListener('wheel', onDocumentMouseWheel, false);
+      window.addEventListener('resize', onWindowResize, false);
+
+      // 5. Load default Promenade Space Texture
+      loadSpaceTexture(promenadeImageUrl);
+
+      // Start tick animations
+      animate();
+    }
+
+    // Helper for HUD Progress state updates
+    function updateProgressBar(percent, text) {
+      document.getElementById('loading-progress').style.width = `${percent}%`;
+      document.getElementById('loading-status').textContent = text.toUpperCase();
+    }
+
+    // Texture Loader Router
+    function loadSpaceTexture(url) {
+      const loader = new THREE.TextureLoader();
+      updateProgressBar(50, "에코-정거장 데이터 수치 분석 중...");
+
+      // 2.5-Second Watchdog Timer: Falls back to procedural texture if loading takes too long
+      let hasLoaded = false;
+      const watchdog = setTimeout(() => {
+        if (!hasLoaded) {
+          console.warn("Image load timed out. Falling back to high-fidelity procedural Solarpunk render...");
+          triggerProceduralFallback();
+          // Display the custom CORS local file drag uploader bypass warning
+          document.getElementById('cors-warning-overlay').classList.remove('hidden');
+        }
+      }, 2500);
+
+      loader.load(
+        url,
+        // Success
+        function (texture) {
+          hasLoaded = true;
+          clearTimeout(watchdog);
+          document.getElementById('cors-warning-overlay').classList.add('hidden'); // Hide if succeeded
+          
+          texture.minFilter = THREE.LinearFilter;
+          texture.generateMipmaps = false;
+          
+          panoramaMesh.material.map = texture;
+          panoramaMesh.material.needsUpdate = true;
+          panoramaMesh.material.color.setHex(0xffffff); // Clear base color
+
+          updateProgressBar(100, "3D 가상 현실 동기화 완벽 완료");
+          
+          // Smooth loading screen transition dismiss
+          setTimeout(() => {
+            const screen = document.getElementById('spatial-loading-screen');
+            screen.style.opacity = '0';
+            setTimeout(() => screen.style.display = 'none', 700);
+          }, 450);
+        },
+        // Progress
+        undefined,
+        // Error Fallback (Fired instantly on local browser file:// CORS constraints)
+        function (err) {
+          hasLoaded = true;
+          clearTimeout(watchdog);
+          console.warn("Real panoramic texture load failed. Reverting to procedural core vector logic.", err);
+          triggerProceduralFallback();
+          
+          // Display CORS local bypass helper overlay
+          document.getElementById('cors-warning-overlay').classList.remove('hidden');
+        }
+      );
+    }
+
+    function triggerProceduralFallback() {
+      updateProgressBar(80, "실사 복원 오류 - 절차적 벡터 복구 모드 전환");
+
+      const fallbackCanvas = generateSolarisPanoramaTexture(activeSpace);
+      const texture = new THREE.CanvasTexture(fallbackCanvas);
+      
+      panoramaMesh.material.map = texture;
+      panoramaMesh.material.needsUpdate = true;
+      panoramaMesh.material.color.setHex(0xffffff);
+
+      setTimeout(() => {
+        const screen = document.getElementById('spatial-loading-screen');
+        screen.style.opacity = '0';
+        setTimeout(() => screen.style.display = 'none', 700);
+      }, 600);
+    }
+
+    // ---------------- CORS BYPASS LOCAL LOADER TRIGGERS ----------------
+    function triggerLocalFileSelect() {
+      document.getElementById('local-file-input').click();
+    }
+
+    function handleLocalFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const screen = document.getElementById('spatial-loading-screen');
+      screen.style.display = 'flex';
+      screen.style.opacity = '1';
+      updateProgressBar(20, "로컬 이미지 분석 중...");
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const dataUrl = e.target.result; // Converted to in-memory Base64 Data URL! (No CORS blocks anymore!)
+        updateProgressBar(60, "보안 프로토콜 우회 돔 텍스처 도포 중...");
+        loadSpaceTexture(dataUrl);
+        showNotification("CORS BYPASS", "로컬 파일을 Data URL로 성공적으로 변환하여 3D VR 엔진에 로드했습니다!", "#10b981");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Select dynamic spaces
+    function selectSpace(spaceId) {
+      activeSpace = spaceId;
+      const conf = activeSpaceColors[spaceId];
+      
+      // Update HUD Labels
+      const displayLabel = spaceId === 'promenade' ? 'PROMENADE 04 (3D REAL)' : (spaceId === 'aquatica' ? 'AQUATICA DOME (3D REAL)' : 'SOLAR-CORE (BACKUP)');
+      document.getElementById('active-space-title').textContent = displayLabel;
+      document.getElementById('diag-solar').textContent = conf.coreVal;
+
+      // Update Slides Cards CSS Highlights (Matterport style UI sync)
+      ['promenade', 'aquatica', 'solaria'].forEach(id => {
+        const card = document.getElementById(`card-${id}`);
+        if (id === spaceId) {
+          card.classList.add('border-emerald-400', 'border-2');
+          card.classList.remove('border-slate-200', 'border');
+        } else {
+          card.classList.remove('border-emerald-400', 'border-2');
+          card.classList.add('border-slate-200', 'border');
+        }
+      });
+
+      // Show loader screen
+      const screen = document.getElementById('spatial-loading-screen');
+      screen.style.display = 'flex';
+      screen.style.opacity = '1';
+
+      // Load matching high fidelity background images
+      if (spaceId === 'promenade') {
+        loadSpaceTexture(promenadeImageUrl);
+        lon = 150; // Calibrated direct alignment angles
+      } else if (spaceId === 'aquatica') {
+        loadSpaceTexture(aquaticaImageUrl);
+        lon = 180;
+      } else {
+        // Fallback procedural Core
+        setTimeout(() => {
+          const newCanvas = generateSolarisPanoramaTexture(spaceId);
+          panoramaMesh.material.map.dispose();
+          panoramaMesh.material.map = new THREE.CanvasTexture(newCanvas);
+          panoramaMesh.material.map.needsUpdate = true;
+          
+          // Dismiss loader
+          screen.style.opacity = '0';
+          setTimeout(() => screen.style.display = 'none', 700);
+          document.getElementById('cors-warning-overlay').classList.add('hidden'); // Clear overlay for vector backup
+        }, 300);
+        lon = 90;
+      }
+
+      lat = 0;
+
+      showNotification("NAVIGATION LINK", `${spaceId.toUpperCase()} 가상 디지털 트윈 공간으로 순간이동 하였습니다.`, "#10b981");
+    }
+
+    // ---------------- EVENT LISTENERS & ROTATIONS ----------------
+    function onPointerDown(event) {
+      if (event.isPrimary === false) return;
+      
+      // Guard modal and slide carousel touches
+      if (event.clientY > window.innerHeight * 0.75) return;
+
+      isUserInteracting = true;
+      onPointerDownPointerX = event.clientX;
+      onPointerDownPointerY = event.clientY;
+      onPointerDownLon = lon;
+      onPointerDownLat = lat;
+
+      document.addEventListener('pointermove', onPointerMove, false);
+      document.addEventListener('pointerup', onPointerUp, false);
+    }
+
+    function onPointerMove(event) {
+      if (event.isPrimary === false) return;
+
+      if (isUserInteracting === true) {
+        // Adjust looking angles according to dragging speeds
+        lon = (onPointerDownPointerX - event.clientX) * 0.16 + onPointerDownLon;
+        lat = (event.clientY - onPointerDownPointerY) * 0.16 + onPointerDownLat;
+      }
+    }
+
+    function onPointerUp() {
+      isUserInteracting = false;
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    }
+
+    function onDocumentMouseWheel(event) {
+      targetZoom += event.deltaY * 0.05;
+      targetZoom = Math.max(30, Math.min(100, targetZoom)); // Bound zoom levels
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Compass Gyro orientation simulation fallback
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation', (e) => {
+        if (e.alpha !== null && isUserInteracting === false) {
+          // Sync with real phone rotate axis if available
+          lon = e.alpha + 90;
+        }
+      });
+    }
+
+    // ---------------- PROJECT 3D HOTSPOTS TO SCREEN SPACE ----------------
+    function updateHotspotsProjection() {
+      const activeHotspots = spaceHotspots[activeSpace] || spaceHotspots['promenade'];
+
+      activeHotspots.forEach(hot => {
+        const el = document.getElementById(hot.id);
+        const labelEl = document.getElementById(hot.id.replace('hotspot', 'label'));
+        if (!el) return;
+
+        // Dynamic Label injection
+        if (labelEl) {
+          labelEl.textContent = hot.text;
+        }
+
+        // Convert angles to Three.js Cartesian coordinate vector
+        const radLon = THREE.MathUtils.degToRad(hot.lon);
+        const radLat = THREE.MathUtils.degToRad(hot.lat);
+        
+        const pos = new THREE.Vector3();
+        pos.x = 400 * Math.cos(radLat) * Math.sin(radLon);
+        pos.y = 400 * Math.sin(radLat);
+        pos.z = 400 * Math.cos(radLat) * Math.cos(radLon);
+
+        const projected = pos.clone().project(camera);
+        
+        // Is hotspot facing behind camera lens plane?
+        if (projected.z > 1.0) {
+          el.classList.add('hidden');
+          el.style.opacity = '0';
+        } else {
+          el.classList.remove('hidden');
+          
+          // Translate to screen coords (percentage positions)
+          const px = (projected.x * 0.5 + 0.5) * window.innerWidth;
+          const py = (projected.y * -0.5 + 0.5) * window.innerHeight;
+
+          el.style.left = `${px}px`;
+          el.style.top = `${py}px`;
+          
+          // Smooth fade in / out mapping boundaries
+          const distFromCenter = Math.sqrt(projected.x * projected.x + projected.y * projected.y);
+          const opacityEdgeLimit = Math.max(0, 1 - (distFromCenter - 0.5) * 2.5);
+
+          el.style.opacity = `${opacityEdgeLimit}`;
+          el.style.transform = `translate(-50%, -50%) scale(${1.2 - projected.z * 0.2})`;
+        }
+      });
+    }
+
+    // ---------------- TICK RENDER LOOP ----------------
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Smooth zoom interpolations
+      currentZoom += (targetZoom - currentZoom) * 0.1;
+      camera.fov = currentZoom;
+      camera.updateProjectionMatrix();
+
+      // Bound pitch rotations
+      lat = Math.max(-85, Math.min(85, lat));
+      phi = THREE.MathUtils.degToRad(90 - lat);
+      theta = THREE.MathUtils.degToRad(lon);
+
+      // Set target directions vector
+      const target = new THREE.Vector3();
+      target.x = 500 * Math.sin(phi) * Math.sin(theta);
+      target.y = 500 * Math.cos(phi);
+      target.z = 500 * Math.sin(phi) * Math.cos(theta);
+
+      camera.lookAt(target);
+
+      // Update GPS Azimuth Degree value
+      const headingAngle = Math.round((lon % 360 + 360) % 360);
+      document.getElementById('hud-azimuth').textContent = `${headingAngle}°`;
+
+      // Render 3D Scene
+      renderer.render(scene, camera);
+
+      // Synchronize 3D direction vectors to HTML Overlay hotspots
+      updateHotspotsProjection();
+    }
+
+
+    // ================= INTERACTION TRIGGERS / PANEL TOGGLES =================
+    function openChat() {
+      document.getElementById('chat-modal').classList.remove('hidden');
+    }
+    function closeChat() {
+      document.getElementById('chat-modal').classList.add('hidden');
+    }
+    function openMarket() {
+      document.getElementById('market-modal').classList.remove('hidden');
+    }
+    function closeMarket() {
+      document.getElementById('market-modal').classList.add('hidden');
+    }
+    function openScanModal() {
+      document.getElementById('scan-modal').classList.remove('hidden');
+    }
+    function closeScanModal() {
+      document.getElementById('scan-modal').classList.add('hidden');
+    }
+
+    function buyItem(name, price) {
+      showNotification("ECO LAB TERMINAL", `${name} 장치를 승인 완료했습니다. 생태 효율이 소폭 상향됩니다.`, "#10b981");
+      closeMarket();
+    }
+
+    function showNotification(title, message, colorCode) {
+      const feed = document.getElementById('notification-feed');
+      const item = document.createElement('div');
+      item.className = "cyber-panel px-4 py-2.5 rounded-2xl shadow-lg pointer-events-auto border-l-4 animate-[bounce_1s_ease-out] flex flex-col gap-0.5";
+      item.style.borderLeftColor = colorCode;
+      item.innerHTML = `
+        <span class="text-[9px] font-mono text-slate-500 futuristic-font flex items-center justify-between">
+          [ ${title} ]
+          <i data-lucide="info" class="w-3 h-3" style="color: ${colorCode}"></i>
+        </span>
+        <span class="text-[11px] text-slate-800 leading-tight font-medium font-mono">${message}</span>
+      `;
+      feed.appendChild(item);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        item.style.opacity = '0';
+        item.style.transition = 'opacity 0.5s ease-out';
+        setTimeout(() => item.remove(), 500);
+      }, 4000);
+    }
+
+
+    // ================= GEMINI AI COMPANION V2.5 PROTOCOL =================
+    let chatHistory = [
+      {
+        role: "user",
+        parts: [{ text: "너는 기술과 자연이 평화롭게 융합된 하늘 도시 '솔라리아(SOLARIA)'의 가이드 AI 이지스(AEGIS)다. 밝고 희망차며, 대단히 지적이고 친절한 청정 에코 테크 도우미 말투로 답변해야 해. 우주 전송, 식물 통신, 태양 정량 정화 시스템 등의 어휘를 사용하고, 구글 검색을 활용해서 친근한 경어체로 대답해 줘." }]
+      }
+    ];
+
+    function toggleVoiceOutput() {
+      state.voiceOutputEnabled = !state.voiceOutputEnabled;
+      const btn = document.getElementById('btn-voice-toggle');
+      if (state.voiceOutputEnabled) {
+        btn.textContent = "ENABLED (KORE)";
+        btn.className = "px-2.5 py-0.5 bg-emerald-500/10 text-emerald-700 border border-emerald-300 rounded-lg hover:bg-emerald-500/20 transition-colors font-bold text-[9px]";
+        showNotification("AEGIS AUDIO", "맑은 음성 가이드 시스템 작동중", "#10b981");
+      } else {
+        btn.textContent = "DISABLED";
+        btn.className = "px-2.5 py-0.5 bg-slate-200 text-slate-500 border border-slate-300 rounded-lg hover:bg-slate-300 transition-colors font-bold text-[9px]";
+        showNotification("AEGIS AUDIO", "음성 안내를 묵음 모드로 변경", "#06b6d4");
+      }
+    }
+
+    function pcmToWav(pcmBase64, sampleRate = 24000) {
+      const buffer = Uint8Array.from(atob(pcmBase64), c => c.charCodeAt(0));
+      const wavHeader = new ArrayBuffer(44);
+      const view = new DataView(wavHeader);
+      
+      const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      };
+
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + buffer.length, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); 
+      view.setUint16(22, 1, true); 
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true); 
+      view.setUint16(32, 2, true); 
+      view.setUint16(34, 16, true); 
+      writeString(view, 36, 'data');
+      view.setUint32(40, buffer.length, true);
+
+      const finalWav = new Blob([wavHeader, buffer], { type: 'audio/wav' });
+      return URL.createObjectURL(finalWav);
+    }
+
+    async function speakAegisText(speechPromptText) {
+      if (!state.voiceOutputEnabled) return;
+      
+      const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [{ parts: [{ text: `소리 내어 말해줘: ${speechPromptText}` }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Kore" 
+              }
+            }
+          }
+        },
+        model: "gemini-2.5-flash-preview-tts"
+      };
+
+      try {
+        const response = await fetchWithRetry(ttsUrl, payload);
+        const data = await response.json();
+        const audioRawBase64 = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (audioRawBase64) {
+          const wavUrl = pcmToWav(audioRawBase64);
+          const audio = new Audio(wavUrl);
+          audio.play();
+        }
+      } catch (err) {
+        console.warn("TTS Synthesis skipped or failed context: ", err);
+      }
+    }
+
+    async function fetchWithRetry(url, payload, maxRetries = 5) {
+      let delay = 1000;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) return res;
+        } catch (e) {
+          if (i === maxRetries - 1) throw e;
+        }
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2; 
+      }
+      throw new Error("Maximum retry attempts exceeded.");
+    }
+
+    // ✨ Feature 1: AI Region Scan Protocol (Environmental diagnostics written by Gemini)
+    async function triggerAIRegionScan() {
+      openScanModal();
+      const contentContainer = document.getElementById('scan-report-content');
+      
+      // Loading screen indicator
+      contentContainer.innerHTML = `
+        <div class="flex items-center justify-center h-full flex-col gap-3">
+          <div class="w-10 h-10 border-4 border-teal-500/20 border-t-teal-600 rounded-full animate-spin"></div>
+          <p class="text-teal-700 text-center font-mono animate-pulse">현재 [${activeSpace.toUpperCase()}] 구역의 생태 분광 주파수 탐지 중...</p>
+        </div>
+      `;
+
+      const prompt = `너는 하늘 도시 솔라리아의 기상 보존 장치 AI 컨트롤러다. 사용자가 현재 탐사 중인 구역은 [${activeSpace.toUpperCase()}]이며, 이 구역의 특징적인 생태(대기, 수자원 순환, 나노 에너지 등)를 웅장하고 과학적인 유토피아 미래적 분위기로 설명하는 정밀 대기 분광 진단 보고서를 4줄 이내로 신속히 작성하라. 반드시 이지적인 경어체로 서술할 것.`;
+      
+      const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: {
+          parts: [{ text: "너는 하늘 도시 솔라리아의 기상 제어 터미널이다. 정중하고 지적이며 이성적인 첨단 환경 분석 조언을 제공해라." }]
+        }
+      };
+
+      const safeUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+      try {
+        const response = await fetchWithRetry(safeUrl, payload);
+        const data = await response.json();
+        const report = data.candidates?.[0]?.content?.parts?.[0]?.text || "센서 피드백 혼선으로 생태 수치 계산에 일시적 장애가 검출되었습니다.";
+        
+        contentContainer.innerHTML = `
+          <div class="border-l-4 border-teal-500 pl-4 py-1 bg-teal-50/50 rounded-r-xl">
+            <h4 class="font-bold text-teal-800 text-[13px] mb-2 futuristic-font">SYS.REPORT [REGION: ${activeSpace.toUpperCase()}]</h4>
+            <p class="text-slate-700 leading-relaxed text-[11px] whitespace-pre-line">${report}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="p-3 bg-white border border-slate-100 rounded-xl">
+              <span class="text-[9px] text-slate-400 block font-bold">OXYGEN RATIO</span>
+              <span class="text-xs font-black text-emerald-600">22.84% (OPTIMAL)</span>
+            </div>
+            <div class="p-3 bg-white border border-slate-100 rounded-xl">
+              <span class="text-[9px] text-slate-400 block font-bold">GRID SYNC RATE</span>
+              <span class="text-xs font-black text-sky-600">99.98% REAL-TIME</span>
+            </div>
+          </div>
+        `;
+
+        // Speak the diagnostics summary
+        speakAegisText(`시스템 보고가 도달했습니다. ${activeSpace} 구역의 기상 및 생태 정보 진단 결과를 전송해 드립니다.`);
+      } catch (err) {
+        contentContainer.innerHTML = `
+          <div class="border-l-4 border-rose-500 pl-4 py-1 bg-rose-50/50 rounded-r-xl">
+            <h4 class="font-bold text-rose-800 text-[13px] mb-2 futuristic-font">SYS.SCAN_ERROR</h4>
+            <p class="text-slate-700 leading-relaxed text-[11px]">
+              외부 분석 서버에 일시적인 신호 장해가 검출되었습니다. 로컬 기상 수치 보정 장치를 이용합니다.<br/><br/>
+              현재 대기질: 극상의 청정도 99.98%<br/>
+              나노 기류 궤적: 순항 상태 유지 중
+            </p>
+          </div>
+        `;
+      }
+    }
+
+    // ✨ Feature 2: AI Molecular Custom Synthesizer using Structured JSON Response Schema
+    async function requestCustomAISynthesis() {
+      const promptText = document.getElementById('synth-prompt').value.trim();
+      if (!promptText) {
+        showNotification("SYNTHESIS WARNING", "원하시는 미래형 장비나 설계를 묘사해 주십시오.", "#f59e0b");
+        return;
+      }
+
+      const resultContainer = document.getElementById('synth-result-container');
+      
+      // Loading State inside custom card
+      resultContainer.innerHTML = `
+        <div class="flex flex-col items-center gap-2">
+          <div class="w-8 h-8 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin"></div>
+          <p class="text-[10px] text-sky-600 font-mono animate-pulse">분자 정렬 및 청정 기술 검증 프로토콜 가동 중...</p>
+        </div>
+      `;
+
+      // Payload configuration for Gemini Structured JSON Response
+      const payload = {
+        contents: [{ parts: [{ text: `사용자가 요청한 장치 묘사: "${promptText}". 이 장비의 맞춤 조립 데이터 카드를 생성하라.` }] }],
+        systemInstruction: {
+          parts: [{ text: "너는 하늘 도시 솔라리아의 분자 조립 라이브러리다. 무조건 청정 솔라펑크 기술에 부합하는 장비 데이터만 승인해야 한다. 만약 파괴적이거나 환경오염 물질이 연상된다면 거부 처리를 하고 거부 사유를 명시해야 한다. 반드시 지정된 스키마 형식의 JSON 문자열로만 응답하라." }]
+        },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              approved: { type: "BOOLEAN", description: "솔라리아 에코 기술 표준에 부합하는지 여부" },
+              itemName: { type: "STRING", description: "가공 조립된 하이테크 미래형 장치 이름" },
+              ecoCost: { type: "INTEGER", description: "합성에 필요한 크레딧 비용 (1000 ~ 9000 범위 수치)" },
+              restorationRating: { type: "STRING", description: "대기 혹은 토양 복원 기여도 퍼센테이지 표시 (예: +3.2%)" },
+              description: { type: "STRING", description: "작동 원리 및 솔라펑크 방식 친환경 묘사 설명 (2줄 이내)" },
+              rejectionReason: { type: "STRING", description: "만약 에코 기준에 맞지 않아 거부 시 거부 사유 서술" }
+            },
+            required: ["approved", "itemName", "ecoCost", "restorationRating", "description", "rejectionReason"]
+          }
+        }
+      };
+
+      const safeUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+      try {
+        const response = await fetchWithRetry(safeUrl, payload);
+        const data = await response.json();
+        const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const synthData = JSON.parse(jsonText);
+
+        if (synthData.approved) {
+          resultContainer.innerHTML = `
+            <div class="w-full flex flex-col gap-2.5 text-left animate-[fadeIn_0.5s_ease-out]">
+              <div class="flex items-center justify-between border-b border-sky-100 pb-1.5">
+                <span class="text-xs font-black text-slate-800 flex items-center gap-1">
+                  <i data-lucide="package-check" class="w-4 h-4 text-emerald-500"></i>
+                  ${synthData.itemName}
+                </span>
+                <span class="text-[9px] px-2 py-0.5 bg-emerald-500/10 text-emerald-700 border border-emerald-300 rounded-full font-bold">
+                  기여도: ${synthData.restorationRating}
+                </span>
+              </div>
+              <p class="text-[10px] text-slate-600 leading-normal">${synthData.description}</p>
+              <div class="flex items-center justify-between mt-1 pt-2 border-t border-sky-100">
+                <span class="text-[9px] text-slate-400 font-mono">ESTIMATED ENERGY</span>
+                <button onclick="buyItem('${synthData.itemName}', ${synthData.ecoCost})" class="px-3 py-1 bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-bold text-[10px] rounded-lg shadow-sm hover:opacity-90 transition-opacity">
+                  ${synthData.ecoCost.toLocaleString()} Cr 합성
+                </button>
+              </div>
+            </div>
+          `;
+          lucide.createIcons();
+          showNotification("SYNTH COMPLETED", `[${synthData.itemName}] 분자 조립 설계도가 완성되었습니다.`, "#10b981");
+          speakAegisText(`나노 조립망이 새로운 장치 ${synthData.itemName} 의 도면 생성을 무사히 완료하였습니다.`);
+        } else {
+          resultContainer.innerHTML = `
+            <div class="w-full flex flex-col items-center text-center gap-2 text-rose-600 animate-[fadeIn_0.3s_ease-out]">
+              <i data-lucide="shield-alert" class="w-10 h-10 text-rose-500 animate-bounce"></i>
+              <h5 class="text-xs font-black">에코 안전성 프로토콜 위배</h5>
+              <p class="text-[10px] text-slate-500 leading-normal font-sans">${synthData.rejectionReason}</p>
+            </div>
+          `;
+          lucide.createIcons();
+          showNotification("SYNTHESIS REJECTED", "친환경 설계 기준에 위배되어 합성 프로토콜이 중단되었습니다.", "#ef4444");
+        }
+
+      } catch (err) {
+        // Fallback mock synthesis if API key is not ready
+        setTimeout(() => {
+          resultContainer.innerHTML = `
+            <div class="w-full flex flex-col gap-2 text-left animate-[fadeIn_0.4s_ease-out]">
+              <div class="flex items-center justify-between border-b border-sky-100 pb-1.5">
+                <span class="text-xs font-black text-slate-800 flex items-center gap-1">
+                  <i data-lucide="package-check" class="w-4 h-4 text-sky-500"></i>
+                  ${promptText.substring(0, 12)}... 필터 슈트
+                </span>
+                <span class="text-[9px] px-2 py-0.5 bg-emerald-500/10 text-emerald-700 border border-emerald-300 rounded-full font-bold">
+                  기여도: +4.5%
+                </span>
+              </div>
+              <p class="text-[10px] text-slate-500 leading-normal">나노 광학 충전 셀과 엽록소 순환 가동망을 일치시켜 자가 기류 대기 정화를 돕는 보조 장치입니다.</p>
+              <div class="flex justify-between items-center mt-2 border-t border-sky-100 pt-2">
+                <span class="text-[9px] text-slate-400 font-mono">MOCK RECONSTRUCTION</span>
+                <button onclick="buyItem('Custom Eco Gear', 4500)" class="px-3 py-1 bg-sky-500 text-white font-bold text-[10px] rounded-lg shadow">
+                  4,500 Cr 합성
+                </button>
+              </div>
+            </div>
+          `;
+          lucide.createIcons();
+          showNotification("MOCK SYNTH ACTIVE", "서버 오프라인 바이패스 조립 데이터를 호출하였습니다.", "#3b82f6");
+        }, 1200);
+      }
+    }
+
+    async function handleSendChat(event) {
+      event.preventDefault();
+      const inputEl = document.getElementById('chat-input');
+      const userText = inputEl.value.trim();
+      if (!userText) return;
+
+      inputEl.value = "";
+      appendMessage("USER", userText, "text-emerald-700 font-extrabold");
+
+      const safeUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      
+      chatHistory.push({
+        role: "user",
+        parts: [{ text: userText }]
+      });
+
+      appendMessage("AEGIS", "대기 네트워크 전송 패널을 통해 정보를 분석하고 있습니다...", "text-slate-400 animate-pulse", "temp-loader");
+
+      const payload = {
+        contents: chatHistory,
+        systemInstruction: {
+          parts: [{ text: "너는 하늘 도시 솔라리아의 수호 안내 이지스(AEGIS)다. 무공해 청정 에너지, 나노 광학 융합, 바이오 테라피 주파수 등 희망찬 녹색 미래 과학 키워드를 곁들여 대단히 정중하고 친절하게 경어로 답해라. 3줄 내외로 산뜻하게 끊어 답해라." }]
+        },
+        tools: [{ "google_search": {} }] 
+      };
+
+      try {
+        const response = await fetchWithRetry(safeUrl, payload);
+        const data = await response.json();
+        
+        const loader = document.getElementById('temp-loader');
+        if (loader) loader.remove();
+
+        const answerText = data.candidates?.[0]?.content?.parts?.[0]?.text || "대기 신호 회로에 잔잔한 간섭이 생겼습니다. 광학 대역을 조절한 뒤 다시 신호를 보내주세요!";
+        
+        appendMessage("AEGIS", answerText, "text-emerald-800 font-bold");
+        chatHistory.push({
+          role: "model",
+          parts: [{ text: answerText }]
+        });
+
+        speakAegisText(answerText);
+
+      } catch (err) {
+        const loader = document.getElementById('temp-loader');
+        if (loader) loader.remove();
+        
+        const simulatedReplies = [
+          "바람 길을 통해 소식을 안전히 탐지했습니다. 솔라리아 생태 지구 연구 돔의 나노 셀들이 기분 좋게 에너지를 내뿜고 있군요. 화면을 드래그하여 투어를 지속해 보세요.",
+          "시스템 수자원 및 산소 교환 순환율이 대단히 순조롭습니다! 현재 바이오 돔 내부 청정도는 무려 99.98%로 완벽하게 쾌적합니다.",
+          "자연과 하나되는 기술이야말로 유토피아의 핵심입니다. 눈앞에 떠 있는 동그란 터미널 아이콘을 눌러 이지스 핵심 인공지능이나 상점 장치와 연결을 가동해 보세요."
+        ];
+        const fallbackMsg = simulatedReplies[Math.floor(Math.random() * simulatedReplies.length)];
+        appendMessage("AEGIS (LOCAL SYSTEM)", fallbackMsg, "text-teal-800 font-bold");
+        speakAegisText(fallbackMsg);
+      }
+    }
+
+    function appendMessage(sender, text, styleClass, tempId = "") {
+      const box = document.getElementById('chat-messages');
+      const msg = document.createElement('div');
+      msg.className = `flex flex-col gap-0.5 border-l-2 pl-3 py-1.5 bg-white/40 rounded-r-xl ${tempId ? '' : 'animate-[fadeIn_0.3s_ease-out]'}`;
+      if (tempId) msg.id = tempId;
+      msg.style.borderLeftColor = sender.includes("USER") ? "#10b981" : "#06b6d4";
+
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      msg.innerHTML = `
+        <div class="flex justify-between text-[9px] text-slate-400 font-bold">
+          <span>[ ${sender} ]</span>
+          <span>${timeStr}</span>
+        </div>
+        <p class="${styleClass}">${text}</p>
+      `;
+      box.appendChild(msg);
+      box.scrollTop = box.scrollHeight;
+    }
+
+
+    // ---------------- WINDOW LOAD INITIALIZER ----------------
+    window.onload = function () {
+      // Start 3D VR WebGL Space Canvas
+      initVRSpace();
+
+      showNotification("ECO-SYSTEM ONLINE", "솔라리아 360° 가상 투어 시스템이 활성화되었습니다. 화면을 마우스로 드래그하거나 모바일에서 기울여 자유롭게 사방을 둘러보세요!", "#10b981");
+    };
+  </script>
+</body>
+</html>
